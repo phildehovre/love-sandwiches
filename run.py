@@ -1,5 +1,7 @@
 import gspread
 from google.oauth2.service_account import Credentials
+from pprint import pprint
+import math
 
 SCOPE = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -11,6 +13,8 @@ CREDS = Credentials.from_service_account_file('creds.json')
 SCOPED_CREDS = CREDS.with_scopes(SCOPE)
 GSPREAD_CLIENT = gspread.authorize(SCOPED_CREDS)
 SHEET = GSPREAD_CLIENT.open('love_sandwiches')
+SANDWICH_TYPES = SHEET.worksheet('stock').get_all_values()[0]
+
 
 
 def get_sales_data():
@@ -33,6 +37,7 @@ def get_sales_data():
             print("Data is valid!")
             break
 
+    update_worksheet(sales_data, 'sales')
     return sales_data
 
 
@@ -55,16 +60,64 @@ def validate_data(values):
     return True
 
 
-def update_sales_worksheet(data):
+def update_worksheet(data, worksheet_name):
     """
-    Update sales worksheet, add new row with the list data provided
+    Update worksheet, add new row with the list data provided.
     """
-    print("Updating sales worksheet...\n")
-    sales_worksheet = SHEET.worksheet("sales")
-    sales_worksheet.append_row(data)
-    print("Sales worksheet updated successfully.\n")
+    print(f"Updating {worksheet_name} worksheet...\n")
+    worksheet = SHEET.worksheet(worksheet_name)
+    worksheet.append_row(data)
+    print(f"{worksheet_name} worksheet updated successfully.\n")
+
+def calculate_surplus(sales):
+    """
+    Source the last stock from previous day.
+    """
+    stock_data = SHEET.worksheet('stock').get_all_values()
+    previous_stock = stock_data[-1]
+    stock = [int(value) for value in previous_stock]
+
+    surplus_data = [] 
+
+    for item, sale in zip(stock, sales):
+        surplus_data.append(int(item) - int(sale))
+    
+    update_worksheet(surplus_data, 'surplus')
+    return surplus_data
+   
+def get_last_5_entries_sales(columns):
+    """
+    Collect data for last five sales tally for each menu item
+    converts to integer and returns columns as lists
+    """
+    print("Collecting stocks data...\n")
+    column_matrix = []
+    for i in range(1, columns + 1):
+        sales_data = SHEET.worksheet('sales')
+        sales_columns = sales_data.col_values(i)[-5:]
+        sales_column_converted = [int(x) for x in sales_columns]
+        column_matrix.append((sales_column_converted))
+
+    return column_matrix
+        
+def stock_recommendation(sales):
+    print("Calculating stock recommendations...\n")
+    recommendation = []
+    for category in sales:
+        recommendation.append(round((sum(category) / len(category)) * 1.1))
+
+    update_worksheet(recommendation, 'stock')
+    return recommendation
 
 
-data = get_sales_data()
-sales_data = [int(num) for num in data]
-update_sales_worksheet(sales_data)
+# 10,20,30,10,20,30
+
+def main():
+    data = get_sales_data()
+    calculate_surplus(data)
+    sales = get_last_5_entries_sales(len(SANDWICH_TYPES))
+    stock_recommendation(sales)
+
+print("\nWelcome to Love Sandwiches stock management!\n")
+
+main()
